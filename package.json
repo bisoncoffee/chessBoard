@@ -1,0 +1,41 @@
+{
+  "name": "vite-react-starter",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run server --prefix stockfish-server\" \"vite\"",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "postinstall": "npm install --save-dev vite-plugin-wasm@3.4.1"
+  },
+  "dependencies": {
+    "@babel/cli": "^7.10.4",
+    "@babel/core": "^7.0.0-0",
+    "@babel/plugin-syntax-async-generators": "^7.8.4",
+    "@babel/plugin-syntax-dynamic-import": "^7.8.3",
+    "@babel/plugin-transform-async-to-generator": "^7.10.4",
+    "@babel/plugin-transform-regenerator": "^7.10.4",
+    "@babel/preset-env": "^7.10.4",
+    "@babel/register": "^7.10.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "stockfish": "^16.0.0",
+    "stockfish.wasm": "^0.10.0",
+    "vite": "^4.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "globals": "^15.12.0",
+    "vite-plugin-wasm": "^3.4.1"
+  }
+}
