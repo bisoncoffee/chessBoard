@@ -1,5 +1,5 @@
 import process from "process"; 
-import express, { response } from "express";
+import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import { spawn } from "child_process";
@@ -24,146 +24,100 @@ const createStockfishProcess = () => {
 };
 
 // Function to convert UCI notation to Algebraic Chess Notation
-const convertUciToAlgebraic = (uciMove, fen) => {
+const convertUciToSan = (uciMove, fen) => {
     try {
-        let chess = new Chess(fen); // Use FEN as is (no swapping turn)
-        const from = uciMove.substring(0, 2);
-        const to = uciMove.substring(2, 4);
-        const promotion = uciMove.length > 4 ? uciMove[4] : undefined;
-        const moveResult = chess.move({ from, to, promotion });
-
-        if (!moveResult) {
-            console.warn(`⚠️ Warning: Could not convert move ${uciMove} to Algebraic notation.`);
-            return uciMove;
-        }
-
-        return moveResult.san;
-    } catch (error) {
-        console.error(`❌ Error converting UCI to Algebraic for move: ${uciMove}, FEN: ${fen}`, error);
+      const chess = new Chess(fen);
+      const from = uciMove.slice(0, 2);
+      const to   = uciMove.slice(2, 4);
+      const promo = uciMove.length > 4 ? uciMove[4] : undefined;
+      const result = chess.move({ from, to, promotion: promo });
+      if (!result) {
+        console.warn(`⚠️ Could not convert ${uciMove} to SAN`);
         return uciMove;
+      }
+      return result.san;
+    } catch (err) {
+      console.error(`❌ SAN conversion error for ${uciMove}`, err);
+      return uciMove;
     }
-};
+  };
 
 // ** API Endpoint to Analyze a Position **
 app.post("/analyze", (req, res) => {
     const { fen } = req.body;
-    if (!fen) return res.status(400).json({ error: "FEN string is required" });
-
-    console.log(`📌 Received FEN for analysis: ${fen}`);
-    const stockfish = createStockfishProcess();
-    let responseBuffer = "";
-    let sentResponse = false;
-
-    let fenParts = fen.split(" ");
-    const currentPlayer = fenParts[1]; // "w" or "b"
-
-    // 🔹 Confirm we are analyzing the right player's turn
-    console.log(`🔍 Analyzing for: ${currentPlayer === "w" ? "White" : "Black"} to move`);
-
-    stockfish.stdout.on("data", (data) => {
-        const output = data.toString();
-        console.log("🐟 Raw Stockfish Output:", output);
-        responseBuffer += output;
-        const moveRegex = /info depth \d+ seldepth \d+ multipv (\d+) score (cp|mate) (-?\d+) .*? pv (\S+)/g;
-        let match;
-        let moves = [];
-        let previousScore = null;
-
-        while ((match = moveRegex.exec(responseBuffer)) !== null) {
-            let move = match[4]; // Move in UCI notation
-            let evaluation = match[2] === "mate" ? `#${match[3]}` : parseInt(match[3]) / 100;
-
-            // ✅ Ensure advantage is correctly signed
-            let advantage = evaluation;
-            if (currentPlayer === "b" && typeof advantage === "number") {
-                advantage = -advantage; // Invert score for Black's perspective
-            }
-
-            if (moves.length === 0) previousScore = advantage;
-
-            moves.push({
-                move,
-                advantage,
-                scoreChange: previousScore !== null ? `${previousScore} -> ${advantage}` : `N/A`,
-            });
+    if (!fen) return res.status(400).json({ error: "FEN required" });
+  
+    console.log(`📌 Received FEN: ${fen}`);
+    const sf = createStockfishProcess();
+  
+    let buffer = "";
+    let responded = false;
+  
+    // We'll keep only the PV lines at the deepest depth seen
+    let bestList = [];
+    let maxDepth = 0;
+  
+    // Figure out who is to move
+    const parts = fen.split(" ");
+    const toMove = parts[1] === "w" ? "White" : "Black";
+  
+    sf.stdout.on("data", (data) => {
+      buffer += data.toString();
+  
+      // Capture depth, multipv, score and pv
+      const regex =
+        /info depth (\d+) seldepth \d+ multipv (\d+) score (cp|mate) (-?\d+) .*? pv (\S+)/g;
+      let match;
+      while ((match = regex.exec(buffer)) !== null) {
+        const depth   = parseInt(match[1], 10);
+        const multipv = parseInt(match[2], 10);
+        let evalRaw   =
+          match[3] === "mate"
+            ? `#${match[4]}`
+            : parseInt(match[4], 10) / 100;
+  
+        // Invert sign for Black to move
+        if (toMove === "Black" && typeof evalRaw === "number") {
+          evalRaw = -evalRaw;
         }
-
-        // ✅ Ensure correct sorting
-        if (currentPlayer === "w") {
-            // White wants the highest score (positive)
-            moves.sort((a, b) => b.advantage - a.advantage);
-        } else {
-            // Black wants the lowest score (most negative)
-            moves.sort((a, b) => a.advantage - b.advantage);
+  
+        // If we see a new, deeper depth, reset our list
+        if (depth > maxDepth) {
+          maxDepth = depth;
+          bestList = [];
         }
-
-        const uniqueMoves = [];
-        const seenMoves = new Set();
-
-        moves.forEach((move) => {
-            if (!seenMoves.has(move.move)) {
-                seenMoves.add(move.move);
-                uniqueMoves.push(move);
-            }
-        });
-
-        moves = uniqueMoves.slice(0, 3);
-
-        // 🔹 Convert moves to algebraic notation before sending response
-        moves = moves.map((m) => ({
-            ...m,
-            algebraic: convertUciToAlgebraic(m.move, fen)
+        // Only collect lines at the current maxDepth
+        if (depth === maxDepth) {
+          bestList.push({ multipv, uci: match[5], advantage: evalRaw });
+        }
+      }
+  
+      // Once Stockfish prints "bestmove", we're done
+      if (!responded && buffer.includes("bestmove")) {
+        responded = true;
+  
+        // Sort by multipv index (1,2,3) and take top 3
+        bestList.sort((a, b) => a.multipv - b.multipv);
+        const responseMoves = bestList.slice(0, 3).map((m, i) => ({
+          moveRank:  i + 1,
+          algebraic: convertUciToSan(m.uci, fen),
+          advantage: m.advantage,
         }));
-
-        moves.forEach((move, index) => {
-            move.moveRank = index + 1;
-        });
-
-        if (!sentResponse && responseBuffer.includes("bestmove")) {
-            sentResponse = true;
-
-            if (moves.length > 0) {
-                console.log(`📌 Stockfish Recommended Moves (Player: ${currentPlayer === "w" ? "White" : "Black"} to move):`);
-                moves.forEach((m) => {
-                    console.log(`   🎯 ${m.moveRank}. ${m.algebraic} | ${currentPlayer === "w" ? "White" : "Black"}: ${m.advantage}`);
-                });
-                res.json({ moves });
-            } else {
-                console.log("❌ No valid moves found.");
-                res.json({ moves: [] });
-            }
-
-            stockfish.kill();
-        }
+  
+        console.log(`📌 Stockfish Recommended Moves (${toMove} to move):`);
+        responseMoves.forEach((m) =>
+          console.log(`   🎯 ${m.moveRank}. ${m.algebraic} | ${toMove}: ${m.advantage}`)
+        );
+  
+        res.json({ moves: responseMoves });
+        sf.kill();
+      }
     });
-
-    // Function to determine adaptive depth based on game stage
-    const getAdaptiveDepth = (fen) => {
-        const pieceCount = fen.split(" ")[0].replace(/\d/g, "").length; // Count non-empty squares
-        if (pieceCount > 25) return 15;  // Early game: Medium depth
-        if (pieceCount > 15) return 20;  // Midgame: High depth
-        return 25; // Endgame: Max depth
-    };
-    
-    const getAdaptiveMultiPV = (fen) => {
-        const pieceCount = fen.split(" ")[0].replace(/\d/g, "").length;
-        return pieceCount > 20 ? 3 : 5; // Early game = 3, Late game = 5
-    };
-    const adaptiveDepth = getAdaptiveDepth(fen); // Get best depth
-    const adaptiveMultiPV = getAdaptiveMultiPV(fen); // Get best MultiPV
-
-    // ✅ Print exactly what we are sending to Stockfish
-    console.log(`🛠️ Sending this FEN to Stockfish: ${fen}`);
-
-    stockfish.stdin.write(`setoption name MultiPV value ${adaptiveMultiPV}\n`);
-    stockfish.stdin.write("setoption name UCI_LimitStrength value false\n");
-    stockfish.stdin.write("setoption name UCI_Elo value 3200\n");
-    stockfish.stdin.write("setoption name Threads value 4\n"); // Use 4 threads for faster search
-    stockfish.stdin.write("go movetime 500\n"); // 500ms per move (~0.5 seconds)
-    stockfish.stdin.write(`position fen ${fen}\n`);
-    setTimeout(() => {
-        stockfish.stdin.write(`go depth ${adaptiveDepth}\n`); // Use calculated depth
-    }, 500);
+  
+    // Kick off the search
+    sf.stdin.write(`position fen ${fen}\n`);
+    sf.stdin.write("setoption name MultiPV value 3\n");
+    sf.stdin.write("go depth 15\n");
 });
 
 
