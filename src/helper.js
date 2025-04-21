@@ -22,7 +22,7 @@ export const createPosition = () => {
   //black
   position[7][0] = 'b_r'
   position[7][1] = 'b_n'
-  position[7][2] = 'b_b'
+  position[7][2] = 'b_b'  
   position[7][3] = 'b_q'
   position[7][4] = 'b_k'
   position[7][5] = 'b_b'

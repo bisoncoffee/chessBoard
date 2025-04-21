@@ -1,4 +1,5 @@
 @import './constants.css';
+@import './Board/Control/StockfishReplies.css';
 
 html,body {
   margin: 0;
@@ -10,7 +11,8 @@ html,body {
   place-content: center;
   height: 100vh;
   background: var(--bg-color);
-  grid-template-columns: auto 220px;
+  grid-template-columns: 200px auto 220px;
+  grid-template-rows: 1fr;
 }
 
 button {

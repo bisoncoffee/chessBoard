@@ -1,0 +1,18 @@
+.stockfish-replies {
+    width: 200px;
+    padding: 10px;
+    color: var(--dark-tile);
+    font-size: 0.9em;
+  }
+  .stockfish-replies h3 {
+    margin-top: 0;
+    font-size: 1em;
+    text-align: left;
+  }
+  .stockfish-replies ol {
+    padding-left: 1em;
+  }
+  .stockfish-replies li {
+    margin-bottom: 4px;
+  }
+  

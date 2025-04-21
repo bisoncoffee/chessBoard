@@ -21,5 +21,6 @@ export const initGameState = {
   castleDirection : {
     w : 'both',
     b : 'both'
-  }
+  },
+  stockfish: [],
 };

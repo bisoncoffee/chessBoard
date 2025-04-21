@@ -2,6 +2,7 @@ import './Board.css';
 import { Files } from './bits/Files';
 import { Ranks } from './bits/Ranks';
 import { Pieces } from './Pieces/Pieces';
+import StockfishReplies from './Control/StockfishReplies';
 import { useAppContext } from '../contexts/Context';
 import Popup from './Popup/Popup';
 import arbiter from '../arbiter/arbiter';
@@ -74,7 +75,7 @@ export const Board = () => {
           <PromotionBox/>
           <GameEnds/>
         </Popup>
-
+        <StockfishReplies />
         <Files files={files}/>
       </div>
     </>

@@ -8,6 +8,7 @@ import { openPromotion } from '../../reducer/actions/popup';
 import { getCastleDirections } from '../../arbiter/getMoves';
 import { detectStalemate, updateCastling, detectInsufficientMaterial, detectCheckMate } from '../../reducer/actions/game';
 import { genFenFromPosition, getNewMoveNotation } from '../../helper'
+import actionTypes from '../../reducer/actionTypes';
 
 
 export const Pieces = () => {
@@ -99,36 +100,54 @@ export const Pieces = () => {
 
 
   const analyzePosition = async (newPosition) => {
-    let fen = genFenFromPosition(newPosition, appState.turn, appState.castleDirection, appState.enPassantSquare);
+    // 1) Generate FEN and flip to the *next* player
+    let fen = genFenFromPosition(
+      newPosition,
+      appState.turn,
+      appState.castleDirection,
+      appState.enPassantSquare
+    );
+    const parts = fen.split(' ');
+    const nextTurn = appState.turn === 'w' ? 'b' : 'w';
+    parts[1] = nextTurn;
+    fen = parts.join(' ');
 
-    // 🔥 Ensure FEN reflects the next player to move
-    let fenParts = fen.split(" ");
-    fenParts[1] = fenParts[1] === "w" ? "b" : "w"; // Flip turn correctly
-    fen = fenParts.join(" "); // Update FEN correctly
-
-    console.log(`🔍 Sending corrected FEN to backend: ${fen}`); // Debugging
+    console.log(`🔍 Sending corrected FEN to backend: ${fen}`);
 
     try {
-      const response = await fetch("http://localhost:5000/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fen }),
+      const res = await fetch('http://localhost:5000/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fen }),
       });
+      const { moves } = await res.json();
+      // if (!moves?.length) {
+      //   console.log('❌ No valid moves returned by Stockfish.');
+      //   return;
+      // }
 
-      const data = await response.json();
-
-      if (!data.moves || data.moves.length === 0) {
-          console.log("❌ No valid moves returned by Stockfish.");
-          return;
+      // console.log(
+      //   `📌 Stockfish Recommended Moves (${nextTurn === 'w' ? 'White' : 'Black'} to move):`
+      // );
+      // moves.forEach(({ moveRank, algebraic, advantage }) => {
+      //   console.log(
+      //     `   🎯 ${moveRank}. ${algebraic} | ${
+      //       nextTurn === 'w' ? 'White' : 'Black'
+      //     }: ${advantage}`
+      //   );
+      // });
+      if (!moves?.length) {
+        console.log('❌ No valid moves returned by Stockfish.');
+        return;
       }
-
-      console.log("📌 Stockfish Recommended Moves:");
-      data.moves.forEach((move) => {
-          console.log(`   🎯 ${move.moveRank}. ${move.algebraic || move.move} | ${appState.turn === "w" ? "Black" : "White"}: ${move.advantage}`);
+  
+      // push into your global state
+      dispatch({
+        type: actionTypes.UPDATE_STOCKFISH,
+        payload: moves
       });
-
-    } catch (error) {
-      console.error("❌ Error analyzing position:", error);
+    } catch (err) {
+      console.error('❌ Error analyzing position:', err);
     }
   };
 
